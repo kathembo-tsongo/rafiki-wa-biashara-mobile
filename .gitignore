@@ -1,0 +1,21 @@
+# Build artifacts
+build/
+build-android/
+build-android-safe/
+.cxx/
+*.apk
+*.aab
+
+# Gradle
+.gradle/
+local.properties
+
+# JVM crash logs
+hs_err_pid*.log
+core.*
+
+# OS
+.DS_Store
+
+# Downloaded model (too large for git -- distribute separately)
+*.gguf
