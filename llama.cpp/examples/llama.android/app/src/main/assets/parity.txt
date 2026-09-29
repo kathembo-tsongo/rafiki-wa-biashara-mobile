@@ -1,0 +1,23 @@
+# Parity questions: routed by `query_pack.py --parity` on the laptop and by
+# RouterSelfTest on the phone. Test-set and invented questions only -- this file
+# ships inside the app, so no participant questions.
+hello
+asante sana
+what time is it now
+Mwi aseo?
+How much NSSF should I deduct for my employee?
+Is NSSF required for casual workers?
+What is the VAT registration threshold?
+What is the penalty for filing VAT returns late?
+Ninahitaji leseni gani kufungua duka la dawa?
+Likizo ya uzazi ni siku ngapi?
+How do I apply for AGPO tenders as a youth-owned business?
+How do I register a trademark in Kenya?
+What documents do I need to export avocados?
+How do I register a sole proprietorship in Kenya?
+What is SHIF and how does it replace NHIF for my employees?
+how do I configure my phone number to pochi la biashara
+How do digital credit providers like mobile loan apps get regulated in Kenya?
+how can I grow my tailoring business
+which business works well in Nakuru
+What are PAYE bands for 2026?

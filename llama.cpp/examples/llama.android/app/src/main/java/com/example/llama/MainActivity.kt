@@ -45,9 +45,22 @@ class MainActivity : AppCompatActivity() {
     private val messages = mutableListOf<Message>()
     private val lastAssistantMsg = StringBuilder()
     private lateinit var messageAdapter: MessageAdapter
+    private lateinit var conversationStore: ConversationStore
+    private var currentConversationId: String = UUID.randomUUID().toString()
+    private val historyLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = result.data?.getStringExtra(HistoryActivity.EXTRA_CONVERSATION_ID) ?: return@registerForActivityResult
+        val conversation = conversationStore.load(id) ?: return@registerForActivityResult
+        messages.clear()
+        messages.addAll(conversation.messages)
+        messageAdapter.notifyDataSetChanged()
+        currentConversationId = conversation.id
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch(Dispatchers.IO) { com.example.llama.rafiki.RouterSelfTest.run(this@MainActivity) }
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         // View model boilerplate and state management is out of this basic sample's scope
@@ -61,6 +74,21 @@ class MainActivity : AppCompatActivity() {
         messagesRv.adapter = messageAdapter
         userInputEt = findViewById(R.id.user_input)
         userActionFab = findViewById(R.id.fab)
+        conversationStore = ConversationStore(applicationContext)
+        findViewById<android.widget.ImageButton>(R.id.new_chat_button).setOnClickListener {
+            if (messages.isNotEmpty()) {
+                conversationStore.save(messages.toList(), currentConversationId)
+            }
+            messages.clear()
+            messageAdapter.notifyDataSetChanged()
+            currentConversationId = UUID.randomUUID().toString()
+        }
+        findViewById<android.widget.ImageButton>(R.id.history_button).setOnClickListener {
+            if (messages.isNotEmpty()) {
+                conversationStore.save(messages.toList(), currentConversationId)
+            }
+            historyLauncher.launch(android.content.Intent(this, HistoryActivity::class.java))
+        }
 
         // Arm AI Chat initialization
         lifecycleScope.launch(Dispatchers.Default) {
@@ -255,7 +283,7 @@ class MainActivity : AppCompatActivity() {
         private const val BENCH_REPETITION = 3
 
         val RAFIKI_DIGEST = """
-You are a helpful assistant advising Kenyan MSME operators on tax, registration, financing, and regulatory compliance. Answer every question directly and confidently using your own general knowledge, including general procedures and steps not listed below.
+You are a helpful assistant advising Kenyan MSME operators on tax, registration, financing, and regulatory compliance. Answer every question directly and confidently using your own general knowledge, including general procedures and steps not listed below. Never open an answer by saying you cannot help, do not have access to something, or would need more information -- you already have everything you need. Go straight into the numbered steps or the direct answer as your first sentence.
 
 The facts below are specific verified figures for a few high-stakes topics. Use them exactly as stated, and do not contradict them, whenever a question touches one of these specific topics:
 - NSSF contribution: 6% employee + 6% employer (matched), Tier I up to KES 9,000, Tier II up to KES 108,000

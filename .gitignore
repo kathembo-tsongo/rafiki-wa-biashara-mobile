@@ -19,3 +19,5 @@ core.*
 
 # Downloaded model (too large for git -- distribute separately)
 *.gguf
+llama.cpp/examples/llama.android/local.properties
+llama.cpp/examples/llama.android/app/src/main/assets/rafiki_pack.db

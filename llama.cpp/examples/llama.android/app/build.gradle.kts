@@ -4,6 +4,7 @@ plugins {
 }
 
 android {
+    androidResources { noCompress += "db" }
     namespace = "com.example.llama"
     compileSdk = 36
 
