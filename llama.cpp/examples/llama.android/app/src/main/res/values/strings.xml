@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">AI Chat basic sample</string>
+    <string name="app_name">Rafiki wa Biashara</string>
+    <string name="history">History</string>
+    <string name="new_chat">New chat</string>
+    <string name="back">Back</string>
+    <string name="no_saved_conversations">No saved conversations yet. Start chatting, then tap "New chat" to save this conversation and begin another.</string>
 </resources>

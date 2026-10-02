@@ -5,21 +5,62 @@
     android:id="@+id/main"
     android:layout_height="match_parent"
     android:layout_width="match_parent">
-
     <LinearLayout
         android:fitsSystemWindows="true"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:layout_marginEnd="4dp"
         tools:context=".MainActivity">
 
+        <!-- Header / toolbar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@color/primary"
+            android:paddingStart="16dp"
+            android:paddingEnd="4dp"
+            android:paddingVertical="10dp">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="@color/text_on_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+            <ImageButton
+                android:id="@+id/history_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/outline_history_24"
+                android:contentDescription="@string/history" />
+            <ImageButton
+                android:id="@+id/new_chat_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/outline_add_24"
+                android:contentDescription="@string/new_chat" />
+        </LinearLayout>
+
+        <!-- Kenyan flag accent strip -->
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:scaleType="fitXY"
+            android:src="@drawable/ic_kenya_flag_accent"
+            android:contentDescription="@null" />
+
+        <!-- Kept for GGUF metadata parsing; not shown to the user -->
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
+            android:visibility="gone"
             android:fadeScrollbars="false">
-
             <TextView
                 android:id="@+id/gguf"
                 android:layout_width="match_parent"
@@ -27,13 +68,7 @@
                 android:padding="16dp"
                 android:text="Selected GGUF model's metadata will show here."
                 style="@style/TextAppearance.MaterialComponents.Body2" />
-
         </ScrollView>
-
-        <com.google.android.material.divider.MaterialDivider
-            android:layout_width="match_parent"
-            android:layout_height="2dp"
-            android:layout_marginHorizontal="16dp" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/messages"
@@ -44,14 +79,12 @@
             android:scrollbars="vertical"
             app:reverseLayout="true"
             tools:listitem="@layout/item_message_assistant"/>
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:paddingStart="16dp"
             android:paddingEnd="4dp">
-
             <EditText
                 android:id="@+id/user_input"
                 android:enabled="false"
@@ -60,8 +93,9 @@
                 android:layout_height="match_parent"
                 android:padding="8dp"
                 style="@style/TextAppearance.MaterialComponents.Body2"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
                 android:hint="Please first pick a GGUF model file to import." />
-
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fab"
                 android:enabled="true"
@@ -70,8 +104,6 @@
                 android:layout_height="wrap_content"
                 android:layout_margin="12dp"
                 android:src="@drawable/outline_folder_open_24" />
-
         </LinearLayout>
-
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

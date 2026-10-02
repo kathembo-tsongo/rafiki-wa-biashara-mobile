@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lifecycleScope.launch(Dispatchers.IO) { com.example.llama.rafiki.RouterSelfTest.run(this@MainActivity) }
+        lifecycleScope.launch(Dispatchers.IO) { com.example.llama.rafiki.Rafiki.init(this@MainActivity) }
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         // View model boilerplate and state management is out of this basic sample's scope
@@ -185,7 +185,7 @@ class MainActivity : AppCompatActivity() {
                 userInputEt.hint = "Loading model..."
             }
             engine.loadModel(modelFile.path)
-            engine.setSystemPrompt(RAFIKI_DIGEST)
+            engine.setSystemPrompt(com.example.llama.rafiki.Rafiki.SYSTEM_PROMPT)
         }
 
     /**
@@ -204,26 +204,50 @@ class MainActivity : AppCompatActivity() {
                 messages.add(Message(UUID.randomUUID().toString(), userMsg, true))
                 lastAssistantMsg.clear()
                 messages.add(Message(UUID.randomUUID().toString(), lastAssistantMsg.toString(), false))
+                messageAdapter.notifyItemRangeInserted(messages.size - 2, 2)
+
+                // Replace the (last) assistant message with new text
+                fun showAssistant(text: String) {
+                    val messageCount = messages.size
+                    check(messageCount > 0 && !messages[messageCount - 1].isUser)
+                    messages.removeAt(messageCount - 1).copy(content = text).let { messages.add(it) }
+                    messageAdapter.notifyItemChanged(messages.size - 1)
+                }
+
+                fun enableInput() {
+                    userInputEt.isEnabled = true
+                    userActionFab.isEnabled = true
+                }
 
                 generationJob = lifecycleScope.launch(Dispatchers.Default) {
-                    engine.sendUserPrompt(userMsg)
-                        .onCompletion {
-                            withContext(Dispatchers.Main) {
-                                userInputEt.isEnabled = true
-                                userActionFab.isEnabled = true
-                            }
-                        }.collect { token ->
-                            withContext(Dispatchers.Main) {
-                                val messageCount = messages.size
-                                check(messageCount > 0 && !messages[messageCount - 1].isUser)
+                    // Rafiki: route first. Verified answers, suggestions, document passages and
+                    // "I don't know" replies are instant and never touch the model.
+                    val reply = try {
+                        com.example.llama.rafiki.Rafiki.responder(this@MainActivity).respond(userMsg)
+                    } catch (e: Exception) {
+                        android.util.Log.e("RafikiRouter", "routing failed", e)
+                        com.example.llama.rafiki.Reply.Text("Sorry, something went wrong. Please try again.")
+                    }
 
-                                messages.removeAt(messageCount - 1).copy(
-                                    content = lastAssistantMsg.append(token).toString()
-                                ).let { messages.add(it) }
-
-                                messageAdapter.notifyItemChanged(messages.size - 1)
-                            }
+                    when (reply) {
+                        is com.example.llama.rafiki.Reply.Text -> withContext(Dispatchers.Main) {
+                            showAssistant(reply.text)
+                            enableInput()
                         }
+                        is com.example.llama.rafiki.Reply.Model ->
+                            engine.sendUserPrompt(reply.prompt, reply.predictLength)
+                                .onCompletion {
+                                    withContext(Dispatchers.Main) {
+                                        // label where the answer came from
+                                        showAssistant(lastAssistantMsg.append(reply.footer).toString())
+                                        enableInput()
+                                    }
+                                }.collect { token ->
+                                    withContext(Dispatchers.Main) {
+                                        showAssistant(lastAssistantMsg.append(token).toString())
+                                    }
+                                }
+                    }
                 }
             }
         }

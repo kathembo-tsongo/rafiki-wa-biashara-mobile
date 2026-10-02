@@ -21,3 +21,5 @@ core.*
 *.gguf
 llama.cpp/examples/llama.android/local.properties
 llama.cpp/examples/llama.android/app/src/main/assets/rafiki_pack.db
+*.bak
+*.gguf
