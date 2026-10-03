@@ -438,6 +438,12 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processUserPrompt(
     }
 
     // Decode user tokens in batches
+    // Rafiki: every question is self-contained: drop earlier turns, keep the processed system prompt.
+    if (current_position > system_prompt_position) {
+        llama_memory_seq_rm(llama_get_memory(g_context), 0, system_prompt_position, -1);
+        current_position = system_prompt_position;
+        LOGi("%s: context reset to system prompt (%d tokens)", __func__, (int) system_prompt_position);
+    }
     if (decode_tokens_in_batches(g_context, g_batch, user_tokens, current_position, true)) {
         LOGe("%s: llama_decode() failed!", __func__);
         return 2;
