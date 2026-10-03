@@ -104,11 +104,11 @@ class Responder(private val router: Router) {
         // A follow-up means the verified answer covers only part of the question: say which part.
         val t = topicTitle(topic, lang)
         sb.append(if (r?.followup == null) footer(lang,
-            "✅ *Verified answer · accurate as of ${asOf()}*",
-            "✅ *Jibu lililothibitishwa · sahihi hadi ${asOf()}*")
+            "✅ *Verified answer · ${stampEn(topic)}*",
+            "✅ *Jibu lililothibitishwa · ${stampSw(topic)}*")
         else footer(lang,
-            "✅ *Verified only for: $t · accurate as of ${asOf()}*",
-            "✅ *Imethibitishwa kwa: $t pekee · sahihi hadi ${asOf()}*"))
+            "✅ *Verified only for: $t · ${stampEn(topic)}*",
+            "✅ *Imethibitishwa kwa: $t pekee · ${stampSw(topic)}*"))
         return Reply.Text(sb.toString())
     }
 
@@ -213,6 +213,16 @@ class Responder(private val router: Router) {
     private fun pick(lang: String, en: String, sw: String) = if (lang == "sw") sw else en
 
     private fun footer(lang: String, en: String, sw: String) = "\n\n---\n" + pick(lang, en, sw)
+
+    // Verified footer stamp: the answer's own source and check date when the pack has one,
+    // otherwise the pack's as-of date.
+    private fun stampEn(topic: String): String = router.cannedSource(topic)
+        ?.let { "Source: ${it.first} · checked ${fmtDate(it.third)}" } ?: "accurate as of ${asOf()}"
+    private fun stampSw(topic: String): String = router.cannedSource(topic)
+        ?.let { "Chanzo: ${it.first} · kimekaguliwa ${fmtDate(it.third)}" } ?: "sahihi hadi ${asOf()}"
+    private fun fmtDate(iso: String): String = try {
+        LocalDate.parse(iso).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+    } catch (e: Exception) { iso }
 
     private fun asOf(): String = try {
         LocalDate.parse(router.asOf).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))

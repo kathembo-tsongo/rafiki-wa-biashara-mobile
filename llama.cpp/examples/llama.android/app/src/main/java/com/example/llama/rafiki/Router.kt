@@ -131,6 +131,13 @@ class Router(private val db: PackStore) {
     }
 
     /** Returns (answer in the operator's language, English text, Kiswahili text). */
+    /** Where a verified answer was checked: (source, url, date checked), or null if none is
+     *  recorded or the pack was built before sources existed. */
+    fun cannedSource(topic: String): Triple<String, String, String>? = try {
+        db.rows("SELECT source, url, checked FROM canned_sources WHERE topic = ?", topic).firstOrNull()
+            ?.let { Triple(it[0] as String, it[1] as String, it[2] as String) }
+    } catch (e: Exception) { null }
+
     fun cannedAnswer(topic: String, lang: String): Triple<String, String?, String?> {
         val row = db.rows("SELECT answer_en, answer_sw FROM canned WHERE topic = ?", topic).single()
         val en = row[0] as String?
