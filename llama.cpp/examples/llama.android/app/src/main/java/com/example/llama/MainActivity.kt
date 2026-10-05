@@ -91,6 +91,12 @@ class MainActivity : AppCompatActivity() {
             historyLauncher.launch(android.content.Intent(this, HistoryActivity::class.java))
         }
 
+        // Pilot: long-press the history button for the researcher menu (export log, withdraw).
+        findViewById<android.widget.ImageButton>(R.id.history_button).setOnLongClickListener {
+            com.example.llama.rafiki.PilotTools.showMenu(this)
+            true
+        }
+
         // Arm AI Chat initialization
         lifecycleScope.launch(Dispatchers.Default) {
             engine = AiChat.getInferenceEngine(applicationContext)

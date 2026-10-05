@@ -42,6 +42,17 @@ class Responder(private val router: Router) {
     /** Which knowledge pack answered, for the test log: "as_of @ source commit". */
     val packId: String get() = listOf(router.asOf, router.sourceCommit).filter { it.isNotEmpty() }.joinToString(" @ ")
 
+    /** "That's not what I asked" -- in English or Kiswahili. */
+    private val complaintRe = Regex(
+        "why (are|did) you|i did ?n[o']t (ask|say|mean|specify)|not what i (asked|meant)|wrong (answer|topic)|" +
+        "(that|this)('s| is) (wrong|not (it|correct|right))|sikuuliza|si hivyo|sio hivyo|jibu si sahihi|umekosea")
+
+    private fun complaintReply(lang: String) = pick(lang,
+        "Sorry -- I matched your question to the wrong topic. Please ask again and tell me your type of business " +
+            "(for example: shop, food, mango trading, salon) or what you need (registration, permit, tax, loan).",
+        "Samahani -- nimeelewa swali lako vibaya. Tafadhali uliza tena na uniambie aina ya biashara yako " +
+            "(kwa mfano: duka, chakula, biashara ya maembe, saluni) au unachohitaji (usajili, kibali, kodi, mkopo).")
+
     // ---------------------------------------------------------------- entry point
     fun respond(question: String, now: ZonedDateTime = ZonedDateTime.now()): Reply {
         val q = question.trim()
@@ -65,6 +76,11 @@ class Responder(private val router: Router) {
         }
 
         val lang = detectLang(q)
+        if (complaintRe.containsMatchIn(q.lowercase())) {
+            prevTopic = null
+            lastTrace = mapOf("lang" to lang, "route" to "COMPLAINT")
+            return Reply.Text(complaintReply(lang))
+        }
         val r = router.route(q, lang, prevTopic, prevQuery)
         lastTrace = mapOf("lang" to lang, "route" to r.kind, "topic" to r.topic,
             "confidence" to r.confidence, "suggest" to r.suggest,
