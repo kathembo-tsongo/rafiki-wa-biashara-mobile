@@ -15,10 +15,11 @@ object RafikiLog {
 
     @Synchronized
     fun write(context: Context, question: String, trace: Map<String, String>, answer: String, ms: Long) {
-        if (!ENABLED) return
+        if (!ENABLED || !PilotConsent.consented(context)) return
         try {
             val o = JSONObject()
             o.put("time", LocalDateTime.now().withNano(0).toString())
+            o.put("participant", PilotConsent.participant(context))
             o.put("question", question)
             for ((k, v) in trace) o.put(k, v)
             o.put("answer", answer)

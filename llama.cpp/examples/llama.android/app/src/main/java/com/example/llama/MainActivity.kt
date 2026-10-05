@@ -63,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) { com.example.llama.rafiki.Rafiki.init(this@MainActivity) }
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+        com.example.llama.rafiki.PilotConsent.showIfNeeded(this)
         // View model boilerplate and state management is out of this basic sample's scope
         onBackPressedDispatcher.addCallback { Log.w(TAG, "Ignore back press for simplicity") }
 
