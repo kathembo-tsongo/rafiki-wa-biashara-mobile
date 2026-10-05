@@ -28,6 +28,7 @@ class Responder(private val router: Router) {
     private var prevQuery: String? = null
     private var lastSources: List<String> = emptyList()
     private var pending: Pending? = null
+    private var afterPick: Pending? = null   // the suggestion just answered with "1"
 
     private class Pending(val topic: String, val route: RouteResult, val question: String, val lang: String)
 
@@ -144,12 +145,21 @@ class Responder(private val router: Router) {
     fun respond(question: String, now: ZonedDateTime = ZonedDateTime.now()): Reply {
         val q = question.trim()
         lastTrace = mapOf("route" to "UNKNOWN")
+        // "2" straight after picking "1": what the documents say about that same question
+        val afterPrev = afterPick
+        afterPick = null
+        if (afterPrev != null && pending == null && q.lowercase().trimEnd('.', '!') in setOf("2", "no", "hapana")) {
+            lastTrace = mapOf("lang" to afterPrev.lang, "route" to "DOCUMENTS (picked 2 after 1)",
+                "topic" to afterPrev.topic, "confidence" to afterPrev.route.confidence)
+            return documents(afterPrev.route, afterPrev.question, afterPrev.lang)
+        }
 
         // A reply to "Is your question about ...? Reply 1 or 2" from the previous turn.
         pending?.let { p ->
             pending = null
             when (q.lowercase()) {
                 "1", "yes", "ndiyo", "ndio" -> {
+                    afterPick = p
                     lastTrace = mapOf("lang" to p.lang, "route" to "VERIFIED (picked 1)", "topic" to p.topic)
                     prevTopic = p.topic
                     return verified(p.topic, p.lang)
@@ -184,6 +194,15 @@ class Responder(private val router: Router) {
                 return if (base is Reply.Text) Reply.Text(contextNote(lang) + "\n\n" + base.text) else base
             }
             return Reply.Text(ackContext(lang))
+        }
+        // A bare number or yes/no with no suggestion waiting: ask for the question instead of calling the model
+        if (Regex("""^(\d{1,2}|yes|no|ndiyo|ndio|hapana)[.!]?$""").matches(q.lowercase())) {
+            lastTrace = mapOf("lang" to lang, "route" to "NO-QUESTION")
+            return Reply.Text(pick(lang,
+                "I'm not sure what that refers to. Please type your question -- for example: " +
+                    "\"how do I register a business name?\"",
+                "Sielewi hilo linahusu nini. Tafadhali andika swali lako -- kwa mfano: " +
+                    "\"nawezaje kusajili jina la biashara?\""))
         }
         val r = router.route(q, lang, prevTopic, prevQuery)
         lastTrace = mapOf("lang" to lang, "route" to r.kind, "topic" to r.topic,
