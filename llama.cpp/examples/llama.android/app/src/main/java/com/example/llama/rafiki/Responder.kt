@@ -18,7 +18,8 @@ sealed class Reply {
     data class Text(val text: String) : Reply()
 
     /** Sent to the model; [footer] is appended when generation finishes. */
-    data class Model(val prompt: String, val footer: String, val predictLength: Int = 300) : Reply()
+    data class Model(val prompt: String, val footer: String, val predictLength: Int = 300,
+                     val checkAgainst: String? = null) : Reply()
 }
 
 class Responder(private val router: Router) {
@@ -288,7 +289,8 @@ class Responder(private val router: Router) {
                 lastSources = used.map { it.source }.distinct()
                 Reply.Model(passagePrompt(q, used, lang), modelFooter(lang,
                     "📄 *From: ${lastSources.joinToString("; ") { title(it) }}. Confirm with ${office(q, lang)} before acting.*",
-                    "📄 *Chanzo: ${lastSources.joinToString("; ") { title(it) }}. Thibitisha na ${office(q, lang)} kabla ya kuchukua hatua.*"))
+                    "📄 *Chanzo: ${lastSources.joinToString("; ") { title(it) }}. Thibitisha na ${office(q, lang)} kabla ya kuchukua hatua.*"),
+                    checkAgainst = used.joinToString("\n") { it.body })
             }
             "PARTIAL" -> {
                 val sb = StringBuilder(pick(lang,
@@ -314,7 +316,8 @@ class Responder(private val router: Router) {
         lastSources = listOfNotNull(background?.source)
         return Reply.Model(advisoryPrompt(q, background, lang), modelFooter(lang,
             "💡 *General advice, not verified information.*",
-            "💡 *Ushauri wa jumla, si taarifa iliyothibitishwa.*"))
+            "💡 *Ushauri wa jumla, si taarifa iliyothibitishwa.*"),
+            checkAgainst = background?.body ?: "")
     }
 
     private fun followUp(lang: String): String =

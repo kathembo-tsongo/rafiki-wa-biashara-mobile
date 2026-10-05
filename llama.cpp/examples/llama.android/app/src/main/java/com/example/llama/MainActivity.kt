@@ -252,6 +252,9 @@ class MainActivity : AppCompatActivity() {
                                 .onCompletion {
                                     withContext(Dispatchers.Main) {
                                         // label where the answer came from
+                                        com.example.llama.rafiki.FigureCheck.apply(lastAssistantMsg.toString(), reply.checkAgainst).let {
+                                            lastAssistantMsg.setLength(0); lastAssistantMsg.append(it)
+                                        }
                                         showAssistant(lastAssistantMsg.append(reply.footer).toString())
                                         com.example.llama.rafiki.RafikiLog.write(this@MainActivity, userMsg,
                                             trace + ("model" to "yes"), lastAssistantMsg.toString(),
