@@ -64,6 +64,7 @@ class Responder(private val router: Router) {
             when (q.lowercase()) {
                 "1", "yes", "ndiyo", "ndio" -> {
                     lastTrace = mapOf("lang" to p.lang, "route" to "VERIFIED (picked 1)", "topic" to p.topic)
+                    prevTopic = p.topic
                     return verified(p.topic, p.lang)
                 }
                 "2", "no", "hapana" -> {

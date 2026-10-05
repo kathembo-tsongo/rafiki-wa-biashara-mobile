@@ -244,6 +244,25 @@ class Router(private val db: PackStore) {
     }
 
     // ---------------------------------------------------------------- the router
+    /** Short follow-ups that lean on the previous question -- same pattern as query_pack.ELLIPTIC. */
+    private val elliptic = Regex("^(and|but|so|what about|what if|how about|how much|how long|how many|when|where|" +
+        "na|je|vipi|basi|halafu)\\b|\\b(it|this|that|them|those|hiyo|hii|hizo|hilo|hayo)\\b")
+
+    /** (previous topic, related topic, cue word) from the pack, in order; empty for packs built before follow-ups. */
+    private val followups: List<Triple<String, String, String>> = try {
+        db.rows("SELECT topic, target, cue FROM followups ORDER BY ord")
+            .map { Triple(it[0] as String, it[1] as String, it[2] as String) }
+    } catch (e: Exception) { emptyList() }
+
+    /** Topic for a short follow-up with no keyword of its own, given the previous topic -- or null (new question).
+     *  Mirrors query_pack.contextual_topic(). */
+    fun contextualTopic(query: String, prevTopic: String): String? {
+        val q = query.lowercase()
+        if (words(q).size > 8) return null
+        followups.firstOrNull { it.first == prevTopic && it.third in q }?.let { return it.second }
+        return if (elliptic.containsMatchIn(q)) prevTopic else null
+    }
+
     fun route(query: String, lang: String = "en", prevTopic: String? = null,
               prevQuery: String? = null, k: Int = 3): RouteResult {
         val r = RouteResult()
@@ -262,12 +281,17 @@ class Router(private val db: PackStore) {
             return r.apply { kind = "FOLLOW_UP"; topic = prevTopic ?: "" }
         }
 
-        val matches = cannedMatches(query)
+        var matches = cannedMatches(query)
+        var contextual: String? = null
+        if (matches.isEmpty() && !prevTopic.isNullOrEmpty()) {
+            contextual = contextualTopic(query, prevTopic)
+            if (contextual != null) matches = listOf(contextual)
+        }
         if (matches.isNotEmpty()) {
             val t = matches[0]
             val (answerText, en, sw) = cannedAnswer(t, lang)
             r.kind = "VERIFIED"; r.topic = t; r.alsoMatched = matches.drop(1); r.answer = answerText
-            val extra = uncoveredTerms(query, t, "${en ?: ""} ${sw ?: ""}")
+            val extra = if (contextual != null) emptyList() else uncoveredTerms(query, t, "${en ?: ""} ${sw ?: ""}")
             val idfs = termIdfs(extra)
             val specific = extra.filter { idfs.getValue(it) >= minSpecificIdf }
             if (specific.isNotEmpty()) {
