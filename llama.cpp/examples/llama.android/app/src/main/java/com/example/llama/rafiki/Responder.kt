@@ -39,6 +39,9 @@ class Responder(private val router: Router) {
     var lastTrace: Map<String, String> = emptyMap()
         private set
 
+    /** Which knowledge pack answered, for the test log: "as_of @ source commit". */
+    val packId: String get() = listOf(router.asOf, router.sourceCommit).filter { it.isNotEmpty() }.joinToString(" @ ")
+
     // ---------------------------------------------------------------- entry point
     fun respond(question: String, now: ZonedDateTime = ZonedDateTime.now()): Reply {
         val q = question.trim()
@@ -64,7 +67,8 @@ class Responder(private val router: Router) {
         val lang = detectLang(q)
         val r = router.route(q, lang, prevTopic, prevQuery)
         lastTrace = mapOf("lang" to lang, "route" to r.kind, "topic" to r.topic,
-            "confidence" to r.confidence, "sources" to r.hits.take(2).joinToString("; ") { it.source })
+            "confidence" to r.confidence, "suggest" to r.suggest,
+            "sources" to r.hits.take(2).joinToString("; ") { it.source })
         if (r.topic.isNotEmpty()) prevTopic = r.topic
         if (r.kind !in setOf("CHAT", "APP_INFO", "NOT_UNDERSTOOD", "FOLLOW_UP")) prevQuery = r.clarified.ifEmpty { q }
 

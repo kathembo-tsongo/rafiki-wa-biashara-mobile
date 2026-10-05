@@ -79,6 +79,10 @@ class Router(private val db: PackStore) {
         db.rows("SELECT keyword FROM digest_override_keywords").map { it[0] as String }
 
     val asOf: String = db.rows("SELECT value FROM meta WHERE key = 'as_of'").single()[0] as String
+    /** Commit of the core repo the pack was built from (empty for packs built before it was recorded). */
+    val sourceCommit: String = try {
+        db.rows("SELECT value FROM meta WHERE key = 'source_commit'").firstOrNull()?.get(0) as String? ?: ""
+    } catch (e: Exception) { "" }
 
     // ---------------------------------------------------------------- text helpers
     private val wordRe = Regex("[a-z0-9]+")

@@ -231,7 +231,8 @@ class MainActivity : AppCompatActivity() {
                         com.example.llama.rafiki.Reply.Text("Sorry, something went wrong. Please try again.")
                     }
 
-                    val trace = com.example.llama.rafiki.Rafiki.responder(this@MainActivity).lastTrace
+                    val trace = com.example.llama.rafiki.Rafiki.responder(this@MainActivity)
+                        .let { it.lastTrace + ("pack" to it.packId) }
                     when (reply) {
                         is com.example.llama.rafiki.Reply.Text -> withContext(Dispatchers.Main) {
                             showAssistant(reply.text)

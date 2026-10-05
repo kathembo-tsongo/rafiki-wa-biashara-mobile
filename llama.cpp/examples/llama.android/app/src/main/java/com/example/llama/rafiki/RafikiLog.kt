@@ -13,6 +13,10 @@ import java.time.LocalDateTime
 object RafikiLog {
     const val ENABLED = true
 
+    private fun appVersion(c: Context): String = try {
+        @Suppress("DEPRECATION") c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: ""
+    } catch (e: Exception) { "" }
+
     @Synchronized
     fun write(context: Context, question: String, trace: Map<String, String>, answer: String, ms: Long) {
         if (!ENABLED || !PilotConsent.consented(context)) return
@@ -24,6 +28,7 @@ object RafikiLog {
             for ((k, v) in trace) o.put(k, v)
             o.put("answer", answer)
             o.put("ms", ms)
+            o.put("app", appVersion(context))
             File(context.filesDir, "rafiki_log.jsonl").appendText(o.toString() + "\n")
         } catch (e: Exception) {
             android.util.Log.w("RafikiLog", "log write failed", e)
