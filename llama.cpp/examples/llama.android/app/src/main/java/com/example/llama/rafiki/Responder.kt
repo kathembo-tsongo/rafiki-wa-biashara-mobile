@@ -315,7 +315,7 @@ class Responder(private val router: Router) {
         "lakini", "kuhusu", "nina", "sina", "nani", "namna", "ndio", "hapana", "pesa", "fedha", "mtaji", "soko",
         "sokoni", "kampuni", "kusajili", "kulipa", "ushuru", "mshahara", "wafanyakazi", "mfanyakazi", "kibali",
         "jina", "shilingi", "kiasi", "ngapi", "gharama", "bei", "chakula", "kilimo", "mwaka", "mwezi", "siku",
-        "wangu", "yetu", "yako", "ili", "hivyo")
+        "wangu", "yetu", "yako", "ili", "hivyo", "bado", "ipo")
     private val enMarkers = setOf("the", "is", "how", "what", "do", "i", "my", "for", "to", "and", "can", "of",
         "a", "in", "are", "does", "should", "which", "where", "when", "hello", "hi", "thanks", "thank")
 
