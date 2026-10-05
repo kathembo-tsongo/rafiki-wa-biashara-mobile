@@ -53,6 +53,82 @@ class Responder(private val router: Router) {
         "Samahani -- nimeelewa swali lako vibaya. Tafadhali uliza tena na uniambie aina ya biashara yako " +
             "(kwa mfano: duka, chakula, biashara ya maembe, saluni) au unachohitaji (usajili, kibali, kodi, mkopo).")
 
+    // ---------------------------------------------------------------- conversation memory (stage 2)
+    // Facts the operator tells us during a chat. Mirrored for laptop tests in context_test.py -- keep in sync.
+    private var ctxBusiness = ""
+    private var ctxPlace = ""
+
+    private val businessRes = listOf(
+        Regex("""\bmy business is (?:for |in |about |selling |a |an )*([a-z' ]{3,40})"""),
+        Regex("""\bi (?:sell|deal in|trade in|run|own) (?:a |an )?([a-z' ]{3,40})"""),
+        Regex("""\bbiashara yangu ni (?:ya |la )?([a-z' ]{3,40})"""),
+        Regex("""\b(?:nauza|ninauza|tunauza) ([a-z' ]{3,40})"""),
+        Regex("""\bninafanya biashara ya ([a-z' ]{3,40})"""))
+    private val places = "nairobi mombasa kisumu nakuru eldoret thika kitale malindi naivasha nanyuki ruiru kitengela kwale kilifi lamu garissa wajir mandera marsabit isiolo meru embu kitui machakos makueni nyandarua nyeri kirinyaga muranga kiambu turkana samburu nandi baringo laikipia narok kajiado kericho bomet kakamega vihiga bungoma busia siaya migori kisii nyamira".split(" ").toSet()
+    private val foodWords = "food mango fruit vegetable chakula matunda mboga maembe embe restaurant hotel cafe bakery juice milk meat fish samaki nyama maziwa hoteli mkahawa mikate".split(" ")
+    private val questionStart = Regex("""^(how|what|where|when|which|who|why|can|could|should|do|does|is|are|will|""" +
+        """je|nawezaje|ninawezaje|vipi|gani|nini|lini|wapi|kwa nini)\b""")
+
+    /** Picks up the business type and place from a message; true if anything was learnt. */
+    private fun learnContext(q: String): Boolean {
+        val l = q.lowercase()
+        var learnt = false
+        for (re in businessRes) {
+            val m = re.find(l) ?: continue
+            val b = m.groupValues[1].split(Regex("""\s+(?:in|at|from|kwa|huko|na|and)\s+""")).first()
+                .trim().split(Regex("""\s+""")).take(4).joinToString(" ")
+            if (b.length >= 3) { ctxBusiness = b; learnt = true }
+            break
+        }
+        router.words(l).firstOrNull { it in places }?.let {
+            ctxPlace = it.replaceFirstChar { c -> c.uppercase() }; learnt = true
+        }
+        return learnt
+    }
+
+    /** A message that only tells us something ("my business is for mangos"), rather than asking. */
+    private fun isContextOnly(q: String): Boolean {
+        val l = q.lowercase().trim()
+        return !l.endsWith("?") && !questionStart.containsMatchIn(l) && router.words(l).size <= 10
+    }
+
+    private fun ctxSummary() = listOf(ctxBusiness, ctxPlace).filter { it.isNotEmpty() }.joinToString(" · ")
+
+    /** One line for model prompts -- the facts, never the chat history. */
+    private fun contextLine(): String {
+        val parts = mutableListOf<String>()
+        if (ctxBusiness.isNotEmpty()) parts.add("business -- $ctxBusiness")
+        if (ctxPlace.isNotEmpty()) parts.add("location -- $ctxPlace")
+        return if (parts.isEmpty()) "" else "About the operator: " + parts.joinToString("; ") + ".\n\n"
+    }
+
+    private fun isFood() = foodWords.any { it in ctxBusiness }
+
+    private fun contextNote(lang: String): String {
+        val what = listOf(ctxBusiness, ctxPlace).filter { it.isNotEmpty() }.joinToString(", ")
+        val food = isFood()
+        return pick(lang,
+            "📝 *Noted: your business -- **$what**.*" + (if (food) "\n\nBecause your business involves food, county " +
+                "health requirements may also apply -- ask me about a \"food business licence\"." else ""),
+            "📝 *Nimezingatia: biashara yako -- **$what**.*" + (if (food) "\n\nKwa kuwa biashara yako inahusu chakula, " +
+                "masharti ya afya ya kaunti yanaweza kuhusika pia -- niulize kuhusu \"leseni ya biashara ya chakula\"." else ""))
+    }
+
+    private fun ackContext(lang: String) = pick(lang,
+        "Asante -- noted: **${ctxSummary()}**. What would you like to know? For example: registration, permits, " +
+            "tax, loans or growing your business.",
+        "Asante -- nimezingatia: **${ctxSummary()}**. Ungependa kujua nini? Kwa mfano: usajili, kibali, kodi, " +
+            "mikopo au kukuza biashara yako.")
+
+    /** Forget the conversation: called when "+" starts a new chat. */
+    fun resetContext() {
+        ctxBusiness = ""
+        ctxPlace = ""
+        prevTopic = null
+        prevQuery = null
+        pending = null
+    }
+
     // ---------------------------------------------------------------- entry point
     fun respond(question: String, now: ZonedDateTime = ZonedDateTime.now()): Reply {
         val q = question.trim()
@@ -82,9 +158,21 @@ class Responder(private val router: Router) {
             lastTrace = mapOf("lang" to lang, "route" to "COMPLAINT")
             return Reply.Text(complaintReply(lang))
         }
+        // Stage 2 memory: remember business type / place; a message that only gives context re-answers the
+        // previous topic with that context, instead of being treated as a new question.
+        if (learnContext(q) && isContextOnly(q)) {
+            val t = prevTopic
+            lastTrace = mapOf("lang" to lang, "route" to "CONTEXT", "topic" to (t ?: ""), "context" to ctxSummary())
+            if (!t.isNullOrEmpty()) {
+                val base = verified(t, lang)
+                return if (base is Reply.Text) Reply.Text(contextNote(lang) + "\n\n" + base.text) else base
+            }
+            return Reply.Text(ackContext(lang))
+        }
         val r = router.route(q, lang, prevTopic, prevQuery)
         lastTrace = mapOf("lang" to lang, "route" to r.kind, "topic" to r.topic,
             "confidence" to r.confidence, "suggest" to r.suggest,
+            "context" to ctxSummary(),
             "sources" to r.hits.take(2).joinToString("; ") { it.source })
         if (r.topic.isNotEmpty()) prevTopic = r.topic
         if (r.kind !in setOf("CHAT", "APP_INFO", "NOT_UNDERSTOOD", "FOLLOW_UP")) prevQuery = r.clarified.ifEmpty { q }
@@ -233,7 +321,7 @@ class Responder(private val router: Router) {
         "say so in one sentence. Do not add any figure, fee, rate, date, phone number or website that is not " +
         "in the extracts. Answer in ${language(lang)}, in at most 120 words, as short numbered steps where possible.\n\n" +
         "Extracts:\n" + hits.mapIndexed { i, h -> "[${i + 1}] (${title(h.source)}) ${excerpt(h.body, 700)}" }
-            .joinToString("\n") + "\n\nQuestion: $q"
+            .joinToString("\n") + "\n\n" + contextLine() + "Question: $q"
 
     private fun digestPrompt(q: String, lang: String): String {
         // Only the DIGEST route sees the verified facts (they used to sit in the system prompt, where the
@@ -245,7 +333,7 @@ class Responder(private val router: Router) {
         return "Answer the question using ONLY the verified facts below, exactly as stated. If they do not cover " +
             "the question, say so in one sentence. When asked to calculate a KES amount, compute it step by step " +
             "and double-check the arithmetic. Answer in ${language(lang)}, in at most 120 words.\n\n" +
-            "Verified facts:\n" + facts.joinToString("\n") + "\n\nQuestion: $q"
+            "Verified facts:\n" + facts.joinToString("\n") + "\n\n" + contextLine() + "Question: $q"
     }
 
     private fun advisoryPrompt(q: String, background: Hit?, lang: String): String =
@@ -254,7 +342,7 @@ class Responder(private val router: Router) {
         "and do not state facts about specific named businesses, places or people. If the question is not " +
         "about business, answer briefly and kindly.\n\n" +
         (background?.let { "Background (from a stored document): ${excerpt(it.body, 600)}\n\n" } ?: "") +
-        "Question: $q\n\nAnswer only this question, in English."
+        contextLine() + "Question: $q\n\nAnswer only this question, in English."
 
     // ---------------------------------------------------------------- helpers
     /** Footer for model-written answers; Kiswahili users are told the model answers in English for now. */

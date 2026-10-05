@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
             messages.clear()
             messageAdapter.notifyDataSetChanged()
             currentConversationId = UUID.randomUUID().toString()
+            com.example.llama.rafiki.Rafiki.responder(this).resetContext()
         }
         findViewById<android.widget.ImageButton>(R.id.history_button).setOnClickListener {
             if (messages.isNotEmpty()) {
