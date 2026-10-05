@@ -250,7 +250,7 @@ class Responder(private val router: Router) {
 
     private fun advisoryPrompt(q: String, background: Hit?, lang: String): String =
         "Give practical, general business advice to a small business owner in Kenya. Answer as 3 to 5 short " +
-        "points, in at most 120 words. Do not state specific prices, fees, interest rates, tax rates or laws, " +
+        "points, in at most 120 words. Do not state specific prices, fees, interest rates, tax rates, laws, statistics or other figures, " +
         "and do not state facts about specific named businesses, places or people. If the question is not " +
         "about business, answer briefly and kindly.\n\n" +
         (background?.let { "Background (from a stored document): ${excerpt(it.body, 600)}\n\n" } ?: "") +
@@ -350,7 +350,7 @@ class Responder(private val router: Router) {
         "lakini", "kuhusu", "nina", "sina", "nani", "namna", "ndio", "hapana", "pesa", "fedha", "mtaji", "soko",
         "sokoni", "kampuni", "kusajili", "kulipa", "ushuru", "mshahara", "wafanyakazi", "mfanyakazi", "kibali",
         "jina", "shilingi", "kiasi", "ngapi", "gharama", "bei", "chakula", "kilimo", "mwaka", "mwezi", "siku",
-        "wangu", "yetu", "yako", "ili", "hivyo", "bado", "ipo")
+        "wangu", "yetu", "yako", "ili", "hivyo", "bado", "ipo", "kiwango", "viwango", "cha", "vya", "ipi")
     private val enMarkers = setOf("the", "is", "how", "what", "do", "i", "my", "for", "to", "and", "can", "of",
         "a", "in", "are", "does", "should", "which", "where", "when", "hello", "hi", "thanks", "thank")
 

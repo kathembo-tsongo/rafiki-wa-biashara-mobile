@@ -49,6 +49,7 @@ object PilotConsent {
         }
         val code = EditText(activity).apply {
             hint = "Nambari ya mshiriki / Participant code (e.g. P01)"
+            setText(participant(activity).takeIf { it != "UNSET" } ?: "")
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
         }
         val box = LinearLayout(activity).apply {
@@ -74,9 +75,18 @@ object PilotConsent {
             .show()
     }
 
+    fun withdrawnTime(c: Context) = prefs(c).getString("withdrawn_time", "") ?: ""
+
+    /** Rejoin after a withdrawal or a "no": show the consent screen again. */
+    fun rejoin(activity: Activity) {
+        prefs(activity).edit().remove("consent").remove("withdrawn_time").apply()
+        showIfNeeded(activity)
+    }
+
     /** Withdrawal: stop logging and delete this phone's log (for a future settings option). */
     fun withdraw(c: Context) {
-        prefs(c).edit().putBoolean("consent", false).apply()
+        prefs(c).edit().putBoolean("consent", false)
+            .putString("withdrawn_time", LocalDateTime.now().withNano(0).toString()).apply()
         File(c.filesDir, "rafiki_log.jsonl").delete()
     }
 }

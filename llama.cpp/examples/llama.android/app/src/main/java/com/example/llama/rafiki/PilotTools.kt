@@ -16,6 +16,13 @@ import java.time.format.DateTimeFormatter
 object PilotTools {
     private fun logFile(a: Activity) = File(a.filesDir, "rafiki_log.jsonl")
 
+    private fun consentStatus(a: Activity): String = when {
+        PilotConsent.consented(a) -> "ndiyo / yes"
+        PilotConsent.withdrawnTime(a).isNotEmpty() ->
+            "amejiondoa / withdrawn ${PilotConsent.withdrawnTime(a).replace("T", " ")}"
+        else -> "hapana / no"
+    }
+
     fun showMenu(a: Activity) {
         val f = logFile(a)
         val n = if (f.exists()) f.readLines().count { it.isNotBlank() } else 0
@@ -23,10 +30,12 @@ object PilotTools {
             .setTitle("Rafiki pilot")
             .setMessage(
                 "Mshiriki / Participant: ${PilotConsent.participant(a).ifEmpty { "-" }}\n" +
-                "Ridhaa / Consent: ${if (PilotConsent.consented(a)) "ndiyo / yes" else "hapana / no"}\n" +
+                "Ridhaa / Consent: ${consentStatus(a)}\n" +
                 "Maswali yaliyohifadhiwa / Logged questions: $n")
             .setPositiveButton("Tuma kumbukumbu / Export log") { _, _ -> export(a) }
-            .setNeutralButton("Jiondoe / Withdraw") { _, _ -> confirmWithdraw(a) }
+            .setNeutralButton(if (PilotConsent.consented(a)) "Jiondoe / Withdraw" else "Jiunge tena / Rejoin") { _, _ ->
+                if (PilotConsent.consented(a)) confirmWithdraw(a) else PilotConsent.rejoin(a)
+            }
             .setNegativeButton("Funga / Close", null)
             .show()
     }
