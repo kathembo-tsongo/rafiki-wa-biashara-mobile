@@ -69,7 +69,7 @@ class Responder(private val router: Router) {
             r.kind.startsWith("FACTUAL") -> documents(r, q, lang)
             r.kind == "DIGEST" -> {
                 lastSources = emptyList()
-                Reply.Model(digestPrompt(q, lang), footer(lang,
+                Reply.Model(digestPrompt(q, lang), modelFooter(lang,
                     "✅ *Based on verified figures (accurate as of ${asOf()}). Confirm with ${office(q, lang)} for your own case.*",
                     "✅ *Kulingana na takwimu zilizothibitishwa (sahihi hadi ${asOf()}). Thibitisha na ${office(q, lang)} kwa hali yako.*"))
             }
@@ -128,7 +128,7 @@ class Responder(private val router: Router) {
             "STRONG" -> {
                 val used = r.hits.take(2)
                 lastSources = used.map { it.source }.distinct()
-                Reply.Model(passagePrompt(q, used, lang), footer(lang,
+                Reply.Model(passagePrompt(q, used, lang), modelFooter(lang,
                     "📄 *From: ${lastSources.joinToString("; ") { title(it) }}. Confirm with ${office(q, lang)} before acting.*",
                     "📄 *Chanzo: ${lastSources.joinToString("; ") { title(it) }}. Thibitisha na ${office(q, lang)} kabla ya kuchukua hatua.*"))
             }
@@ -154,7 +154,7 @@ class Responder(private val router: Router) {
     private fun advisory(r: RouteResult, q: String, lang: String): Reply {
         val background = r.hits.firstOrNull()?.takeIf { r.confidence == "STRONG" }
         lastSources = listOfNotNull(background?.source)
-        return Reply.Model(advisoryPrompt(q, background, lang), footer(lang,
+        return Reply.Model(advisoryPrompt(q, background, lang), modelFooter(lang,
             "💡 *General advice, not verified information.*",
             "💡 *Ushauri wa jumla, si taarifa iliyothibitishwa.*"))
     }
@@ -188,7 +188,10 @@ class Responder(private val router: Router) {
 
     // ---------------------------------------------------------------- model prompts
     // These travel with each question: the engine only accepts a system prompt once, at load.
-    private fun language(lang: String) = if (lang == "sw") "Kiswahili" else "English"
+    // The model understands Kiswahili but cannot write it reliably (tested 5 Oct 2026), so it always answers
+    // in English; modelFooter() tells Kiswahili users why.
+    @Suppress("UNUSED_PARAMETER")
+    private fun language(lang: String) = "English"
 
     private fun passagePrompt(q: String, hits: List<Hit>, lang: String): String =
         "Answer the question using ONLY the document extracts below. If they do not contain the answer, " +
@@ -197,19 +200,32 @@ class Responder(private val router: Router) {
         "Extracts:\n" + hits.mapIndexed { i, h -> "[${i + 1}] (${title(h.source)}) ${excerpt(h.body, 700)}" }
             .joinToString("\n") + "\n\nQuestion: $q"
 
-    private fun digestPrompt(q: String, lang: String): String =
-        "Answer using the verified facts in your instructions, exactly as stated. If they do not cover the " +
-        "question, say so in one sentence. Answer in ${language(lang)}, in at most 120 words.\n\nQuestion: $q"
+    private fun digestPrompt(q: String, lang: String): String {
+        // Only the DIGEST route sees the verified facts (they used to sit in the system prompt, where the
+        // small model recited them in answers to unrelated questions).
+        val skip = setOf("what", "your", "with", "from", "have", "does", "much", "many", "need", "kenya", "there")
+        val words = q.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length > 3 && it !in skip }
+        val relevant = Rafiki.FACTS.filter { f -> val l = f.lowercase(); words.any { it in l } }
+        val facts = if (relevant.isEmpty()) Rafiki.FACTS else relevant.take(4)
+        return "Answer the question using ONLY the verified facts below, exactly as stated. If they do not cover " +
+            "the question, say so in one sentence. When asked to calculate a KES amount, compute it step by step " +
+            "and double-check the arithmetic. Answer in ${language(lang)}, in at most 120 words.\n\n" +
+            "Verified facts:\n" + facts.joinToString("\n") + "\n\nQuestion: $q"
+    }
 
     private fun advisoryPrompt(q: String, background: Hit?, lang: String): String =
-        "Give practical, general business advice to a small business owner in Kenya. Answer in ${language(lang)}, " +
-        "as 3 to 5 short points, in at most 120 words. Do not state specific prices, fees, interest rates, tax " +
-        "rates or laws, and do not state facts about specific named businesses, places or people. If the " +
-        "question is not about business, answer briefly and kindly.\n\n" +
+        "Give practical, general business advice to a small business owner in Kenya. Answer as 3 to 5 short " +
+        "points, in at most 120 words. Do not state specific prices, fees, interest rates, tax rates or laws, " +
+        "and do not state facts about specific named businesses, places or people. If the question is not " +
+        "about business, answer briefly and kindly.\n\n" +
         (background?.let { "Background (from a stored document): ${excerpt(it.body, 600)}\n\n" } ?: "") +
-        "Question: $q"
+        "Question: $q\n\nAnswer only this question, in English."
 
     // ---------------------------------------------------------------- helpers
+    /** Footer for model-written answers; Kiswahili users are told the model answers in English for now. */
+    private fun modelFooter(lang: String, en: String, sw: String) = footer(lang, en, sw) +
+        (if (lang == "sw") "\n*Kumbuka: majibu yanayoandikwa na modeli kwa sasa yanapatikana kwa Kiingereza pekee.*" else "")
+
     private fun pick(lang: String, en: String, sw: String) = if (lang == "sw") sw else en
 
     private fun footer(lang: String, en: String, sw: String) = "\n\n---\n" + pick(lang, en, sw)
@@ -293,13 +309,29 @@ class Responder(private val router: Router) {
 
     private val swMarkers = setOf("na", "ya", "kwa", "ni", "je", "gani", "nini", "vipi", "naweza", "ninahitaji",
         "jinsi", "wapi", "lini", "kuna", "hii", "hiyo", "sana", "mimi", "yangu", "nataka", "tafadhali", "habari",
-        "asante", "ninawezaje", "nitasajili", "kupata", "kuanza", "kufungua", "biashara", "mkopo", "leseni", "kodi")
+        "asante", "ninawezaje", "nitasajili", "kupata", "kuanza", "kufungua", "biashara", "mkopo", "leseni", "kodi",
+        "nawezaje", "ninaweza", "unaweza", "tunaweza", "wateja", "mteja", "duka", "dukani", "maduka", "bidhaa",
+        "faida", "hasara", "mauzo", "zaidi", "kwangu", "kwenye", "au", "pia", "sasa", "kila", "bila", "hadi", "kama",
+        "lakini", "kuhusu", "nina", "sina", "nani", "namna", "ndio", "hapana", "pesa", "fedha", "mtaji", "soko",
+        "sokoni", "kampuni", "kusajili", "kulipa", "ushuru", "mshahara", "wafanyakazi", "mfanyakazi", "kibali",
+        "jina", "shilingi", "kiasi", "ngapi", "gharama", "bei", "chakula", "kilimo", "mwaka", "mwezi", "siku",
+        "wangu", "yetu", "yako", "ili", "hivyo")
     private val enMarkers = setOf("the", "is", "how", "what", "do", "i", "my", "for", "to", "and", "can", "of",
         "a", "in", "are", "does", "should", "which", "where", "when", "hello", "hi", "thanks", "thank")
 
-    /** Kiswahili if it has more Kiswahili than English marker words ("pochi la biashara" alone doesn't flip it). */
+    /** Kiswahili word families: naweza-/ninaweza- forms, ku- verbs (kuvutia, kupata), -ni locatives (dukani). */
+    private fun swFamily(t: String) = t.length >= 5 && (t.startsWith("nawe") || t.startsWith("ninawe") ||
+        t.startsWith("tunawe") || t.startsWith("unawe") || (t.startsWith("ku") && t.last() in "aeiou") || t.endsWith("ni"))
+
+    /** Kiswahili if it has more Kiswahili than English marker words ("pochi la biashara" alone doesn't flip it).
+     *  On a tie (often 0-0), a question of 3+ words is Kiswahili when at least 70% of its words end in a vowel. */
     fun detectLang(q: String): String {
         val w = router.words(q)
-        return if (w.count { it in swMarkers } > w.count { it in enMarkers }) "sw" else "en"
+        val sw = w.count { it in swMarkers || swFamily(it) }
+        val en = w.count { it in enMarkers }
+        if (sw != en) return if (sw > en) "sw" else "en"
+        val long = w.filter { it.length >= 3 && it.all { c -> c in 'a'..'z' } }
+        if (long.size < 3) return "en"
+        return if (long.count { it.last() in "aeiou" } * 10 >= long.size * 7) "sw" else "en"
     }
 }
