@@ -222,6 +222,7 @@ class MainActivity : AppCompatActivity() {
                 generationJob = lifecycleScope.launch(Dispatchers.Default) {
                     // Rafiki: route first. Verified answers, suggestions, document passages and
                     // "I don't know" replies are instant and never touch the model.
+                    val t0 = System.currentTimeMillis()
                     val reply = try {
                         com.example.llama.rafiki.Rafiki.responder(this@MainActivity).respond(userMsg)
                     } catch (e: Exception) {
@@ -229,9 +230,12 @@ class MainActivity : AppCompatActivity() {
                         com.example.llama.rafiki.Reply.Text("Sorry, something went wrong. Please try again.")
                     }
 
+                    val trace = com.example.llama.rafiki.Rafiki.responder(this@MainActivity).lastTrace
                     when (reply) {
                         is com.example.llama.rafiki.Reply.Text -> withContext(Dispatchers.Main) {
                             showAssistant(reply.text)
+                            com.example.llama.rafiki.RafikiLog.write(this@MainActivity, userMsg, trace,
+                                reply.text, System.currentTimeMillis() - t0)
                             enableInput()
                         }
                         is com.example.llama.rafiki.Reply.Model ->
@@ -240,6 +244,9 @@ class MainActivity : AppCompatActivity() {
                                     withContext(Dispatchers.Main) {
                                         // label where the answer came from
                                         showAssistant(lastAssistantMsg.append(reply.footer).toString())
+                                        com.example.llama.rafiki.RafikiLog.write(this@MainActivity, userMsg,
+                                            trace + ("model" to "yes"), lastAssistantMsg.toString(),
+                                            System.currentTimeMillis() - t0)
                                         enableInput()
                                     }
                                 }.collect { token ->

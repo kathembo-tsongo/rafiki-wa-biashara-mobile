@@ -35,22 +35,36 @@ class Responder(private val router: Router) {
         prevTopic = null; prevQuery = null; lastSources = emptyList(); pending = null
     }
 
+    /** What the last respond() decided, for the test log (RafikiLog). */
+    var lastTrace: Map<String, String> = emptyMap()
+        private set
+
     // ---------------------------------------------------------------- entry point
     fun respond(question: String, now: ZonedDateTime = ZonedDateTime.now()): Reply {
         val q = question.trim()
+        lastTrace = mapOf("route" to "UNKNOWN")
 
         // A reply to "Is your question about ...? Reply 1 or 2" from the previous turn.
         pending?.let { p ->
             pending = null
             when (q.lowercase()) {
-                "1", "yes", "ndiyo", "ndio" -> return verified(p.topic, p.lang)
-                "2", "no", "hapana" -> return documents(p.route, p.question, p.lang)
+                "1", "yes", "ndiyo", "ndio" -> {
+                    lastTrace = mapOf("lang" to p.lang, "route" to "VERIFIED (picked 1)", "topic" to p.topic)
+                    return verified(p.topic, p.lang)
+                }
+                "2", "no", "hapana" -> {
+                    lastTrace = mapOf("lang" to p.lang, "route" to "DOCUMENTS (picked 2)",
+                        "topic" to p.topic, "confidence" to p.route.confidence)
+                    return documents(p.route, p.question, p.lang)
+                }
             }
             // anything else: the operator moved on -- route it as a new question
         }
 
         val lang = detectLang(q)
         val r = router.route(q, lang, prevTopic, prevQuery)
+        lastTrace = mapOf("lang" to lang, "route" to r.kind, "topic" to r.topic,
+            "confidence" to r.confidence, "sources" to r.hits.take(2).joinToString("; ") { it.source })
         if (r.topic.isNotEmpty()) prevTopic = r.topic
         if (r.kind !in setOf("CHAT", "APP_INFO", "NOT_UNDERSTOOD", "FOLLOW_UP")) prevQuery = r.clarified.ifEmpty { q }
 
