@@ -57,6 +57,7 @@ class Responder(private val router: Router) {
     // Facts the operator tells us during a chat. Mirrored for laptop tests in context_test.py -- keep in sync.
     private var ctxBusiness = ""
     private var ctxPlace = ""
+    private var lastContextTopic = ""
 
     private val businessRes = listOf(
         Regex("""\bmy business is (?:for |in |about |selling |a |an )*([a-z' ]{3,40})"""),
@@ -104,14 +105,23 @@ class Responder(private val router: Router) {
 
     private fun isFood() = foodWords.any { it in ctxBusiness }
 
+    private val towns = setOf("eldoret", "thika", "kitale", "malindi", "naivasha", "nanyuki", "ruiru", "kitengela")
+
     private fun contextNote(lang: String): String {
-        val what = listOf(ctxBusiness, ctxPlace).filter { it.isNotEmpty() }.joinToString(", ")
+        val en = mutableListOf<String>()
+        val sw = mutableListOf<String>()
+        if (ctxBusiness.isNotEmpty()) { en.add("your business -- **$ctxBusiness**"); sw.add("biashara yako -- **$ctxBusiness**") }
+        if (ctxPlace.isNotEmpty()) { en.add("location -- **$ctxPlace**"); sw.add("mahali -- **$ctxPlace**") }
+        val county = ctxPlace.isNotEmpty() && ctxPlace.lowercase() !in towns
         val food = isFood()
-        return pick(lang,
-            "📝 *Noted: your business -- **$what**.*" + (if (food) "\n\nBecause your business involves food, county " +
-                "health requirements may also apply -- ask me about a \"food business licence\"." else ""),
-            "📝 *Nimezingatia: biashara yako -- **$what**.*" + (if (food) "\n\nKwa kuwa biashara yako inahusu chakula, " +
-                "masharti ya afya ya kaunti yanaweza kuhusika pia -- niulize kuhusu \"leseni ya biashara ya chakula\"." else ""))
+        val enExtra = (if (county) "\n\nYour single business permit comes from the **$ctxPlace** county government." else "") +
+            (if (food) "\n\nBecause your business involves food, county health requirements may also apply -- " +
+                "ask me about a \"food business licence\"." else "")
+        val swExtra = (if (county) "\n\nKibali chako kimoja cha biashara hutolewa na serikali ya kaunti ya **$ctxPlace**." else "") +
+            (if (food) "\n\nKwa kuwa biashara yako inahusu chakula, masharti ya afya ya kaunti yanaweza kuhusika pia -- " +
+                "niulize kuhusu \"leseni ya biashara ya chakula\"." else "")
+        return pick(lang, "📝 *Noted: ${en.joinToString("; ")}.*$enExtra",
+            "📝 *Nimezingatia: ${sw.joinToString("; ")}.*$swExtra")
     }
 
     private fun ackContext(lang: String) = pick(lang,
@@ -124,6 +134,7 @@ class Responder(private val router: Router) {
     fun resetContext() {
         ctxBusiness = ""
         ctxPlace = ""
+        lastContextTopic = ""
         prevTopic = null
         prevQuery = null
         pending = null
@@ -163,7 +174,12 @@ class Responder(private val router: Router) {
         if (learnContext(q) && isContextOnly(q)) {
             val t = prevTopic
             lastTrace = mapOf("lang" to lang, "route" to "CONTEXT", "topic" to (t ?: ""), "context" to ctxSummary())
+            if (!t.isNullOrEmpty() && t == lastContextTopic) {
+                return Reply.Text(contextNote(lang) + "\n\n" + pick(lang,
+                    "Ask me about any step for the details.", "Niulize kuhusu hatua yoyote kwa maelezo zaidi."))
+            }
             if (!t.isNullOrEmpty()) {
+                lastContextTopic = t
                 val base = verified(t, lang)
                 return if (base is Reply.Text) Reply.Text(contextNote(lang) + "\n\n" + base.text) else base
             }
@@ -438,7 +454,7 @@ class Responder(private val router: Router) {
         "lakini", "kuhusu", "nina", "sina", "nani", "namna", "ndio", "hapana", "pesa", "fedha", "mtaji", "soko",
         "sokoni", "kampuni", "kusajili", "kulipa", "ushuru", "mshahara", "wafanyakazi", "mfanyakazi", "kibali",
         "jina", "shilingi", "kiasi", "ngapi", "gharama", "bei", "chakula", "kilimo", "mwaka", "mwezi", "siku",
-        "wangu", "yetu", "yako", "ili", "hivyo", "bado", "ipo", "kiwango", "viwango", "cha", "vya", "ipi")
+        "wangu", "yetu", "yako", "ili", "hivyo", "bado", "ipo", "kiwango", "viwango", "cha", "vya", "ipi", "nauza", "ninauza", "tunauza", "niko", "tuko", "ninafanya")
     private val enMarkers = setOf("the", "is", "how", "what", "do", "i", "my", "for", "to", "and", "can", "of",
         "a", "in", "are", "does", "should", "which", "where", "when", "hello", "hi", "thanks", "thank")
 
