@@ -21,7 +21,7 @@ interface PackStore {
 
 data class Hit(
     val docid: Long, val score: Double, val norm: Double, val coverage: Double, val focusTf: Long,
-    var kb: String = "", var source: String = "", var body: String = "",
+    var kb: String = "", var source: String = "", var body: String = "", var domain: String = "",
 )
 
 data class FollowUp(val confidence: String, val focus: String?, val hits: List<Hit>, val words: List<String>)
@@ -39,6 +39,8 @@ data class RouteResult(
     var clarified: String = "",
     /** English words the bilingual glossary added for retrieval (empty for most English questions). */
     var expanded: List<String> = emptyList(),
+    /** One of the six study domains, "general", or "" (chat, clock, not understood). */
+    var domain: String = "",
 )
 
 class Router(private val db: PackStore) {
@@ -269,8 +271,26 @@ class Router(private val db: PackStore) {
             h.kb = (row[0] as String?) ?: ""
             h.source = (row[1] as String?) ?: ""
             h.body = row[2] as String
+            h.domain = chunkDomain(h.docid)
         }
         return r
+    }
+
+    /** A chunk's domain, or "" for packs built before domains (query_pack.chunk_domain_of). */
+    private fun chunkDomain(docid: Long): String = try {
+        db.rows("SELECT domain FROM chunks WHERE id = ?", docid.toString()).firstOrNull()?.get(0) as String? ?: ""
+    } catch (e: Exception) { "" }
+
+    /** A verified answer's domain, or "" for packs built before domains (query_pack.topic_domain). */
+    fun topicDomain(topic: String): String = try {
+        db.rows("SELECT domain FROM topic_domain WHERE topic = ?", topic).firstOrNull()?.get(0) as String? ?: ""
+    } catch (e: Exception) { "" }
+
+    /** Mirrors query_pack.answer_domain(): the verified topic's domain, else the top passage's. */
+    private fun answerDomain(r: RouteResult): String = when {
+        r.topic.isNotEmpty() -> topicDomain(r.topic).ifEmpty { "general" }
+        r.hits.isNotEmpty() -> r.hits[0].domain.ifEmpty { "general" }
+        else -> "general"
     }
 
     private fun confidence(hits: List<Hit>): String {
@@ -309,6 +329,13 @@ class Router(private val db: PackStore) {
 
     fun route(query: String, lang: String = "en", prevTopic: String? = null,
               prevQuery: String? = null, k: Int = 3): RouteResult {
+        val r = routeInner(query, lang, prevTopic, prevQuery, k)
+        r.domain = if (r.kind in setOf("CHAT", "APP_INFO", "NOT_UNDERSTOOD")) "" else answerDomain(r)
+        return r
+    }
+
+    private fun routeInner(query: String, lang: String, prevTopic: String?,
+                           prevQuery: String?, k: Int): RouteResult {
         val r = RouteResult()
         val (terms, expanded) = searchTerms(query)
         r.expanded = expanded

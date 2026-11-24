@@ -151,7 +151,7 @@ class Responder(private val router: Router) {
         afterPick = null
         if (afterPrev != null && pending == null && q.lowercase().trimEnd('.', '!') in setOf("2", "no", "hapana")) {
             lastTrace = mapOf("lang" to afterPrev.lang, "route" to "DOCUMENTS (picked 2 after 1)",
-                "topic" to afterPrev.topic, "confidence" to afterPrev.route.confidence)
+                "topic" to afterPrev.topic, "confidence" to afterPrev.route.confidence, "domain" to afterPrev.route.domain)
             return documents(afterPrev.route, afterPrev.question, afterPrev.lang)
         }
 
@@ -161,13 +161,14 @@ class Responder(private val router: Router) {
             when (q.lowercase()) {
                 "1", "yes", "ndiyo", "ndio" -> {
                     afterPick = p
-                    lastTrace = mapOf("lang" to p.lang, "route" to "VERIFIED (picked 1)", "topic" to p.topic)
+                    lastTrace = mapOf("lang" to p.lang, "route" to "VERIFIED (picked 1)", "topic" to p.topic,
+                        "domain" to router.topicDomain(p.topic))
                     prevTopic = p.topic
                     return verified(p.topic, p.lang)
                 }
                 "2", "no", "hapana" -> {
                     lastTrace = mapOf("lang" to p.lang, "route" to "DOCUMENTS (picked 2)",
-                        "topic" to p.topic, "confidence" to p.route.confidence)
+                        "topic" to p.topic, "confidence" to p.route.confidence, "domain" to p.route.domain)
                     return documents(p.route, p.question, p.lang)
                 }
             }
@@ -207,7 +208,7 @@ class Responder(private val router: Router) {
         }
         val r = router.route(q, lang, prevTopic, prevQuery)
         lastTrace = mapOf("lang" to lang, "lang_mix" to langMix(q), "expanded" to r.expanded.joinToString(" "),
-            "route" to r.kind, "topic" to r.topic,
+            "route" to r.kind, "topic" to r.topic, "domain" to r.domain,
             "confidence" to r.confidence, "suggest" to r.suggest,
             "context" to ctxSummary(),
             "sources" to r.hits.take(2).joinToString("; ") { it.source })
