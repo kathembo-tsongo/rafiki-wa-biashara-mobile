@@ -71,6 +71,8 @@ class Router(private val db: PackStore) {
     private val cannedSearchNorm = num("canned_search_norm")
     private val cannedSearchCoverage = num("canned_search_coverage")
     private val minSpecificIdf = num("min_specific_idf")
+    /** Packs built before this threshold existed keep the old behaviour (0 = keep every word). */
+    private val minLeftoverDf = try { num("min_leftover_df") } catch (e: Exception) { 0.0 }
 
     /** Bilingual glossary, "kiswahili<TAB>english" in matching order (phrases longest first, then
      *  *roots). Empty for packs built before the glossary, which turns expansion off. */
@@ -180,6 +182,43 @@ class Router(private val db: PackStore) {
         return emptyList()
     }
 
+    private val negations = setOf("no", "not", "without", "bila")
+
+    /** Plural and -ing endings only; negations become "no" -- mirrors query_pack.light_stem(). */
+    fun lightStem(t: String): String {
+        if (t in negations) return "no"
+        if (t.length <= 4) return t
+        if (t.endsWith("ies")) return t.dropLast(3) + "y"
+        if (t.endsWith("es") && t.dropLast(2).let { it.endsWith("ss") || it.endsWith("x") || it.endsWith("ch") || it.endsWith("sh") })
+            return t.dropLast(2)
+        if (t.endsWith("s") && !t.endsWith("ss")) return t.dropLast(1)
+        if (t.endsWith("ing") && t.length >= 6) return t.dropLast(3)
+        return t
+    }
+
+    private val factualStems by lazy { factualWords.map { lightStem(it) }.toHashSet() }
+
+    /** Second chance for a Kiswahili question through the glossary -- mirrors
+     *  query_pack.canned_matches_glossary(): every content word of a keyword (in any order) must
+     *  be among the question's words; one-word keywords only if the glossary supplied the word;
+     *  the keyword must contain a factual word; negations must be present too. */
+    fun cannedMatchesGlossary(tokens: List<String>, added: List<String>): List<String> {
+        val have = tokens.map { lightStem(it) }.toHashSet()
+        val fromGlossary = added.map { lightStem(it) }.toHashSet()
+        val best = LinkedHashMap<String, Pair<Int, Long>>()
+        for (k in keywords) {
+            val need = words(k.keyword).filter { it !in stopwords || it in negations }.map { lightStem(it) }
+            if (need.none { it in factualStems }) continue
+            val ok = if (need.size >= 2) need.all { it in have } else need.size == 1 && need[0] in fromGlossary
+            if (ok && (k.topic !in best || k.keyword.length > best.getValue(k.topic).first)) {
+                best[k.topic] = k.keyword.length to k.priority
+            }
+        }
+        return best.keys.sortedWith(
+            compareBy<String>({ it in generalTopics }, { -best.getValue(it).first }, { best.getValue(it).second })
+        )
+    }
+
     /** Returns (answer in the operator's language, English text, Kiswahili text). */
     /** Where a verified answer was checked: (source, url, date checked), or null if none is
      *  recorded or the pack was built before sources existed. */
@@ -228,6 +267,21 @@ class Router(private val db: PackStore) {
             } else 0.0
         }
         return out
+    }
+
+    /** Number of chunks containing the term -- mirrors query_pack.term_df(). */
+    private fun termDf(t: String, table: String = "chunks_fts"): Long {
+        val row = db.rows("SELECT matchinfo($table, 'pcnalx') FROM $table WHERE $table MATCH ? LIMIT 1", t)
+        return if (row.isNotEmpty()) parseMatchinfo(row[0][0] as ByteArray, 1).perTerm[0].second else 0L
+    }
+
+    /** Mirrors query_pack.drop_untranslated(): in a glossary-translated question, leftover words
+     *  found in fewer than min_leftover_df chunks are untranslated Kiswahili and are not searched. */
+    private fun dropUntranslated(terms: List<String>, expanded: List<String>): List<String> {
+        if (expanded.isEmpty()) return terms
+        val english = queryTerms(expanded.joinToString(" "), 99).toHashSet()
+        val kept = terms.filter { it in english || termDf(it) >= minLeftoverDf }
+        return kept.ifEmpty { terms }
     }
 
     private data class SearchResult(val hits: List<Hit>, val idfs: Map<String, Double>, val focus: String?)
@@ -337,8 +391,9 @@ class Router(private val db: PackStore) {
     private fun routeInner(query: String, lang: String, prevTopic: String?,
                            prevQuery: String?, k: Int): RouteResult {
         val r = RouteResult()
-        val (terms, expanded) = searchTerms(query)
+        val (rawTerms, expanded) = searchTerms(query)
         r.expanded = expanded
+        val terms = dropUntranslated(rawTerms, expanded)
         val lower = query.lowercase()
 
         if (isSmallTalk(query)) return r.apply { kind = "CHAT" }
@@ -354,6 +409,15 @@ class Router(private val db: PackStore) {
         }
 
         var matches = cannedMatches(query)
+        val generalOnly = matches.isNotEmpty() && matches.all { it in generalTopics }
+        if (r.expanded.isNotEmpty() && (matches.isEmpty() || generalOnly)) {
+            // no keyword phrase matched, or only an umbrella topic: let the glossary find a more specific one
+            val (added, used) = glossaryExpand(query)
+            val gm = cannedMatchesGlossary(added + words(query).filter { it !in used }, added)
+            if (gm.isNotEmpty() && (matches.isEmpty() || gm[0] !in generalTopics)) {
+                matches = gm + matches.filter { it !in gm }
+            }
+        }
         var contextual: String? = null
         if (matches.isEmpty() && !prevTopic.isNullOrEmpty()) {
             contextual = contextualTopic(query, prevTopic)
