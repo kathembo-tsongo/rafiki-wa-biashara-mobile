@@ -21,3 +21,10 @@ How do digital credit providers like mobile loan apps get regulated in Kenya?
 how can I grow my tailoring business
 which business works well in Nakuru
 What are PAYE bands for 2026?
+# Kiswahili and mixed questions (cross-lingual retrieval through the glossary)
+Kodi ya mapato ni kiasi gani kwa biashara ndogo?
+Nawezaje kulipa michango ya hifadhi ya jamii kwa wafanyakazi wangu?
+Ninahitaji kibali cha biashara kutoka kaunti, ada ni ngapi?
+Mfanyakazi wa kike anastahili likizo ya uzazi ya muda gani?
+Nitauzaje bidhaa zangu kwa wateja wengi zaidi?
+What is the VAT threshold for my biashara?

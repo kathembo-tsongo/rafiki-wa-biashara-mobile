@@ -37,6 +37,8 @@ data class RouteResult(
     var followup: FollowUp? = null,
     var suggest: String = "",
     var clarified: String = "",
+    /** English words the bilingual glossary added for retrieval (empty for most English questions). */
+    var expanded: List<String> = emptyList(),
 )
 
 class Router(private val db: PackStore) {
@@ -67,6 +69,13 @@ class Router(private val db: PackStore) {
     private val cannedSearchNorm = num("canned_search_norm")
     private val cannedSearchCoverage = num("canned_search_coverage")
     private val minSpecificIdf = num("min_specific_idf")
+
+    /** Bilingual glossary, "kiswahili<TAB>english" in matching order (phrases longest first, then
+     *  *roots). Empty for packs built before the glossary, which turns expansion off. */
+    private val glossary: List<Pair<String, String>> = list("glossary").mapNotNull {
+        val p = it.split('\t', limit = 2)
+        if (p.size == 2) p[0] to p[1] else null
+    }
 
     // The keyword table is small and read on every question: load it once.
     private data class Kw(val topic: String, val priority: Long, val keyword: String)
@@ -110,8 +119,43 @@ class Router(private val db: PackStore) {
         return referential.any { it in q }
     }
 
-    private fun isFactual(query: String): Boolean =
-        words(query).any { it in factualWords || it.trimEnd('s') in factualWords }
+    private fun isFactual(query: String, extra: List<String> = emptyList()): Boolean =
+        (words(query) + extra).any { it in factualWords || it.trimEnd('s') in factualWords }
+
+    /** (English words to add, Kiswahili words they replace) -- mirrors query_pack.glossary_expand(). */
+    fun glossaryExpand(query: String): Pair<List<String>, Set<String>> {
+        var q = " " + words(query).joinToString(" ") + " "
+        val added = ArrayList<String>()
+        val used = HashSet<String>()
+        for ((sw, en) in glossary) {
+            if (sw.startsWith("*")) continue
+            if (" $sw " in q) {
+                if (en != "-") added.addAll(en.split(" "))
+                used.addAll(sw.split(" "))
+                q = q.replace(" $sw ", " | ")
+            }
+        }
+        val roots = glossary.filter { it.first.startsWith("*") }.map { it.first.substring(1) to it.second }
+        for (w in q.split(" ").filter { it.isNotEmpty() }) {
+            if (w == "|" || w in used) continue
+            for ((root, en) in roots) {
+                if (root in w) {
+                    if (en != "-") added.addAll(en.split(" "))
+                    used.add(w)
+                    break
+                }
+            }
+        }
+        return added to used
+    }
+
+    /** Retrieval terms: glossary English words first, then the question's own words minus the
+     *  Kiswahili words they replaced -- mirrors query_pack.search_terms(). */
+    fun searchTerms(query: String, limit: Int = 12): Pair<List<String>, List<String>> {
+        val (added, used) = glossaryExpand(query)
+        val rest = words(query).filter { it !in used }
+        return queryTerms((added + rest).joinToString(" "), limit) to added
+    }
 
     // ---------------------------------------------------------------- verified answers
     fun cannedMatches(query: String): List<String> {
@@ -266,7 +310,8 @@ class Router(private val db: PackStore) {
     fun route(query: String, lang: String = "en", prevTopic: String? = null,
               prevQuery: String? = null, k: Int = 3): RouteResult {
         val r = RouteResult()
-        val terms = queryTerms(query)
+        val (terms, expanded) = searchTerms(query)
+        r.expanded = expanded
         val lower = query.lowercase()
 
         if (isSmallTalk(query)) return r.apply { kind = "CHAT" }
@@ -303,7 +348,7 @@ class Router(private val db: PackStore) {
 
         // Verified answers are all regulatory, so only factual questions are searched against
         // them -- and a search match is only ever a SUGGESTION the operator confirms.
-        val factual = isFactual(query)
+        val factual = isFactual(query, r.expanded)
         if (factual) {
             val c = search(terms, 1, table = "canned_fts").hits
             if (c.isNotEmpty() && c[0].focusTf >= 1 && c[0].norm >= cannedSearchNorm &&

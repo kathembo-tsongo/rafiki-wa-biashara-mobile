@@ -206,7 +206,8 @@ class Responder(private val router: Router) {
                     "\"nawezaje kusajili jina la biashara?\""))
         }
         val r = router.route(q, lang, prevTopic, prevQuery)
-        lastTrace = mapOf("lang" to lang, "route" to r.kind, "topic" to r.topic,
+        lastTrace = mapOf("lang" to lang, "lang_mix" to langMix(q), "expanded" to r.expanded.joinToString(" "),
+            "route" to r.kind, "topic" to r.topic,
             "confidence" to r.confidence, "suggest" to r.suggest,
             "context" to ctxSummary(),
             "sources" to r.hits.take(2).joinToString("; ") { it.source })
@@ -483,6 +484,16 @@ class Responder(private val router: Router) {
     /** Kiswahili word families: naweza-/ninaweza- forms, ku- verbs (kuvutia, kupata), -ni locatives (dukani). */
     private fun swFamily(t: String) = t.length >= 5 && (t.startsWith("nawe") || t.startsWith("ninawe") ||
         t.startsWith("tunawe") || t.startsWith("unawe") || (t.startsWith("ku") && t.last() in "aeiou") || t.endsWith("ni"))
+
+    /** For the evaluation log: "mixed" when a question has both Kiswahili and English marker words
+     *  ("What is the VAT threshold for my biashara?"), otherwise the answer language. The answer
+     *  itself still follows [detectLang]. */
+    fun langMix(q: String): String {
+        val w = router.words(q)
+        val sw = w.count { it in swMarkers || swFamily(it) }
+        val en = w.count { it in enMarkers }
+        return if (sw >= 1 && en >= 1) "mixed" else detectLang(q)
+    }
 
     /** Kiswahili if it has more Kiswahili than English marker words ("pochi la biashara" alone doesn't flip it).
      *  On a tie (often 0-0), a question of 3+ words is Kiswahili when at least 70% of its words end in a vowel. */
